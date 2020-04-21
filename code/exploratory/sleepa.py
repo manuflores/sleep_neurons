@@ -24,9 +24,9 @@ def rolling_mean_numba(x, window_size= 30):
     return (cumsum[window_size:] - cumsum[:-window_size]) / float(window_size)
 
 
-# Load and preprocess data from the FigShare repository
 
-def preprocess_ahrens_figshare(path, 
+
+def load_ahrens_data_figshare(path, 
     #norm_method = 'rolling_mean'
     ):
 
@@ -41,7 +41,7 @@ def preprocess_ahrens_figshare(path,
 
     # Load data 
     dat = h5py.File(path, 'r')
-    #'../Downloads/subject_7/TimeSeries.h5'
+   
 
     # Get the neuron activity traces 
     neuron_data = dat['CellResp']
@@ -271,6 +271,8 @@ def compressive_sensing_1d_sklearn(signal, subsample_proportion, alpha= 0.001):
 
 	# Convert back to time domain
 	reconstructed_sklearn = spfft.idct(fourier_recon, norm='ortho', axis=0)
+
+	return reconstructed_sklearn
 
 
 
