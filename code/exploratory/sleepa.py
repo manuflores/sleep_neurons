@@ -1,9 +1,5 @@
 # sleep_neurons
 
-import numpy as np 
-from sklearn.decomposition import IncrementalPCA as iPCA
-from sklearn.decomposition import PCA 
-import h5py
 
 from umap import UMAP as umap 
 from numba import njit 
@@ -11,6 +7,14 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import scipy.io as sio
 import seaborn as sns
+import numpy as np 
+import h5py
+
+from sklearn.decomposition import IncrementalPCA as iPCA
+from sklearn.decomposition import PCA 
+from sklearn.linear_model import Lasso 
+import scipy.fftpack as spfft
+import cvxpy as cvx
 
 
 
@@ -174,9 +178,12 @@ plot_df = pd.DataFrame(
 
 
 
-def compressive_sensing_1d_cvxpy(corrupted_signal, ): 
+def compressive_sensing_1d_cvxpy(signal, subsample_proportion): 
 
 	"""
+	
+	Apply compressive sensing to 1D signal using cosine basis. 
+
 	Params
 	--------
 	corrupted_signal (array-like)
@@ -185,8 +192,87 @@ def compressive_sensing_1d_cvxpy(corrupted_signal, ):
 
 	"""
 
+	n = signal.shape[0]
+	
+	# Generate random sample of indices by sampling without remplacement
+	rand_ixs = np.random.choice(n, subsample_size, replace=False) 
+
+	# Initialize subsample size 
+	subsample_size = int(n * subsample_proportion) # 10% sample
+
 	# Create cosine transform operator
+	A = spfft.idct(np.identity(n), norm='ortho', axis=0)
+
+	# Make sampled operator A= ψϕ s.t. A.shape = [subsample_size, n]
+	A_ = A[rand_ixs]
+
+	# Initialize cvxpy variable
+	vx = cvx.Variable(n)
+
+	# Select random indices from signal 
+	y = signal[rand_ixs]
+
+	# Set optimization objective : L1-norm
+	objective = cvx.Minimize(cvx.norm(vx, 1))
+
+	# Set constrains for linear regression problem 
+	constraints = [A*vx == y]
+
+
+	# Initialize cvxpy problem
+	prob = cvx.Problem(objective, constraints)
+	result = prob.solve(verbose=True)
+
+	# Get reconstructed signal as numpy array  
+	x = np.array(vx.value)
+
+	# Convert reconstructed signal from frequency to time domain
+	reconstructed = spfft.idct(x, norm="ortho", axis=0)
+
+	return reconstructed 
+
+
+def compressive_sensing_1d_sklearn(signal, subsample_proportion, alpha= 0.001): 
+
+	"""
+	Compressive sensing of 1D signal using sci-kit learn. 
+	This function uses cosine basis. 
+
+	"""
+
+	# Get signal shape 
+	n = signal.shape[0]
+
+	# Initialize subsample size 
+	subsample_size = int(n * subsample_proportion)
+	
+	# Generate random sample of indices by sampling without remplacement
+	rand_ixs = np.random.choice(n, subsample_size, replace=False) 
+
+	# Initialize subsample size 
+	subsample_size = int(n * subsample_proportion) # 10% sample
+	
+	# Initialize cosine transform operator
+	A = spfft.idct(np.identity(n), norm='ortho', axis=0)
+
+	# Make sampled operator A= ψϕ s.t. A.shape = [subsample_size, n]
+	A_ = A[rand_ixs]
+
+	# Get subsample of signal 
+	y = signal[rand_ixs]
+
+	# Initialize and fit linear regression with L1 norm
+	lasso = Lasso(alpha = alpha)
+
+	lasso.fit(A, y)
+
+	# Get fourier coefficients
+	fourier_coef = lasso.coef_
+
+	# Convert back to time domain
+	reconstructed_sklearn = spfft.idct(fourier_recon, norm='ortho', axis=0)
 
 
 
 
+	
