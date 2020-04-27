@@ -9,12 +9,21 @@ import scipy.io as sio
 import seaborn as sns
 import numpy as np 
 import h5py
+from bokeh.plotting import figure
+import colorcet as cc 
 
+from sklearn.cluster import DBSCAN
+from sklearn.preprocessing import StandardScaler 
 from sklearn.decomposition import IncrementalPCA as iPCA
 from sklearn.decomposition import PCA 
 from sklearn.linear_model import Lasso 
+from sklearn.mixture import BayesianGaussianMixture as bGMM
+from sklearn.mixture import GaussianMixture as GMM
+
+
 import scipy.fftpack as spfft
 import cvxpy as cvx
+
 
 
 
@@ -91,7 +100,8 @@ def subsample_data(neuron_data, sample_size = 10000):
 #def visualize_cluster_traces_mpl():
 
 
-def cluster_neuron_data(neuron_data, sample_size, window_size, **kwargs):
+def cluster_neuron_data(neuron_data, sample_size, window_size,
+	pca_components= 20, n_neighbors= 30, **kwargs):
 
 	"""
 	Wrapper for first version of the pipeline . 
@@ -102,24 +112,29 @@ def cluster_neuron_data(neuron_data, sample_size, window_size, **kwargs):
 	# Apply rolling mean to each row 
 	processed_neurons = np.apply_along_axis(
     	func1d=rolling_mean_numba,
-    	axis=0,
+    	axis=1,
     	arr = neuron_samples,
     	**{'window_size':window_size}
 	)
 
+	# Normalize data 
+
+	scaler = StandardScaler()
+
+	normalized_neurons = scaler.fit_transform(processed_neurons)
+
 	# Apply PCA to processed neurons
-	pcs = PCA(n_components = 20).fit_transform(processed_neurons)
+	pcs = PCA(n_components = pca_components).fit_transform(normalized_neurons)
 
 
 	# Apply UMAP to neurons' principal components
 	embedding = umap(
 	    min_dist =0, 
-	    #n_neighbors=20,
+	    n_neighbors=n_neighbors,
 	    n_components = 2, 
 	    random_state = 3287354).fit_transform(pcs)
 
 	# Apply DBSCAN clustering on UMAP space 
-
 	clus_dens = DBSCAN(eps = 0.5).fit(embedding)
 
 
@@ -134,47 +149,6 @@ def cluster_neuron_data(neuron_data, sample_size, window_size, **kwargs):
 
 
 	return rand_ixs, plot_df
-
-
-
-
-
-
-# Apply rolling mean to each row 
-processed_neurons = np.apply_along_axis(
-    func1d=rolling_mean, axis=0, arr = sample_neurons
-)
-
-## Apply PCA to processed neurons
-pcs = iPCA(n_components = 10).fit_transform(processed_neurons)
-
-
-# Apply UMAP to neurons' principal components
-embedding = umap(
-	min_dist =0, 
-	n_neighbors=20,
-	n_components = 2, 
-	random_state = 34).fit_transform(pcs)
-
-# Apply clustering 
-
-# clus = SpectralClustering(
-# 	n_clusters = 8,	
-# 	affinity = 'nearest_neighbors').fit(embedding)
-
-clus_dens = DBSCAN(eps = 0.5).fit(embedding)
-
-# Get cluster labels 
-cluster_labels = clus_dens.labels_
-
-
-# Make a dataframe for visualization 
-plot_df = pd.DataFrame(
-    np.concatenate([embedding, cluster_labels.reshape(-1,1)], axis = 1),
-    columns = ['UMAP_1', 'UMAP_2', 'cluster_labels'])
-
-
-
 
 
 
@@ -275,6 +249,149 @@ def compressive_sensing_1d_sklearn(signal, subsample_proportion, alpha= 0.001):
 	return reconstructed_sklearn
 
 
+def get_bayesian_information_criterion(max_clusters, data):
+	"""
+	Wrapper function to get the bayesian information criterion 
+	to choose the number of clusters for a given dataset. 
+
+	Params
+	--------
+
+	* max_clusters
+
+	* data
 
 
+	Returns
+	--------
+
+	* bic
+	"""
+
+
+	n_components = np.arange(1, max_clusters)
+
+	models = [GMM(n, covariance_type='full', random_state=0).fit(data)
+	          for n in n_components]
+
+	bic = [m.bic(data) for m in models]
+
+	return bic 
+
+
+def make_cluster_trace_plot(clus_num, clus_neurons, time_arr, max_ix, fill_color, line_color, **kwargs):
+
+	"""
+	Wrapper function to make a single cluster trace plot. 
 	
+	Params
+	--------
+
+	Returns 
+	--------
+
+	"""
+	ptiles = np.percentile(clus_neurons, [2.5, 97.5], axis = 0)
+
+	mean_neuron = np.mean(clus_neurons, axis = 0)
+
+	# Get minimum and maximum value for setting axes ranges
+	y_min = ptiles[0].min()
+	y_max = ptiles[1].max()
+
+	p = figure(
+	    plot_width=600,
+	    #plot_height=300,
+	    y_range=(y_min - 0.1, y_max + 0.05),
+	    x_axis_label="seconds",
+	    y_axis_label = 'activity',
+	    title = 'cluster ' + str(clus_num),
+	    **kwargs	    
+	)
+
+	if max_ix is not None: 
+		
+		# Plot mean line 
+		p.line(x=time_arr[:max_ix], y=mean_neuron[:max_ix], line_width=3, line_color = line_color)
+
+		# Plot percentiles 
+		fig = bebi103.viz.fill_between(
+		    x1 = t[:max_ix] , #
+		    y1 = ptiles[0, :max_ix],#
+		    x2 = t[:max_ix], 
+		    y2 = ptiles[1, :max_ix],
+		    patch_kwargs = {'fill_alpha' : 0.4, 'fill_color': fill_color},
+		    line_kwargs = {'line_color': line_color },
+		    p = p 
+		)
+		
+
+	else: 
+
+		# Plot mean line 
+		p.line(x=time_arr, y=mean_neuron, line_width=3, line_color = line_color)
+
+		# Plot percentiles 
+		fig = bebi103.viz.fill_between(
+		    x1 = time_arr , #
+		    y1 = ptiles[0],#
+		    x2 = time_arr, 
+		    y2 = ptiles[1],
+		    patch_kwargs = {'fill_alpha' : 0.4, 'fill_color': fill_color},
+		    line_kwargs = {'line_color': fill_color},
+		    p = p 
+		)
+
+	return fig 
+
+def trace_plot_all_clusters(processed_neurons, clus_df, time_arr, label_col,  ix_col, color_palette = None,
+	max_ix= None, clus_num_list = None, **kwargs):
+	
+	"""
+	Wrapper function to make a list of bokeh figures containing the distribution of traces
+	for visualization of clustering results. 
+	
+	Params
+	--------
+
+	Returns 
+	--------
+
+	* fig_list
+	
+	"""
+
+	if clus_nums == None:
+		clus_nums = clus_df[label_col].unique()
+	else:
+		pass
+
+	if max_ix == None: 
+		max_ix = len(time_arr)
+	else:
+		pass
+
+	if color_palette == None:
+		color_palette = cc.glasbey_cool
+
+	fig_list = []
+
+
+	for clus in clus_nums: 
+
+		# Extract cluster data 
+		clus_ixs_ = clus_df[clus_df[label_col] == clus][ix_col].values
+
+		trace_clus= make_cluster_trace_plot(
+			clus,
+			clus_data_,
+			time_arr, 
+			max_ix, 
+			fill_color = color_palette[clus], 
+			line_color= color_palette[clus],
+			**kwargs)
+
+		fig_list.append(trace_clus)
+
+	return fig_list
+
