@@ -10,6 +10,7 @@ The dataset used in this work can be downloaded at:
 
 * Chen, Xiuye; Mu, Yu; Kuan, Aaron; Nikitchenko, Maxim; Randlett, Owen; Chen, Alex; et al. (2018): Whole-brain light-sheet imaging data. [https://doi.org/10.25378/janelia.7272617.v4](https://janelia.figshare.com/articles/Whole-brain_light-sheet_imaging_data/7272617/4)
 
+We thank Prof. Ahrens and Dr. Chen for guidance in the use of this dataset. 
 
 ## Code
 
