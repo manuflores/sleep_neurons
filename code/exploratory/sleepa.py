@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # sleep_neurons
 
 
@@ -11,6 +12,10 @@ import numpy as np
 import h5py
 from bokeh.plotting import figure
 import colorcet as cc 
+import bokeh 
+import holoviews as hv 
+from bebi103.viz import fill_between
+
 
 from sklearn.cluster import DBSCAN
 from sklearn.preprocessing import StandardScaler 
@@ -95,9 +100,9 @@ def subsample_data(neuron_data, sample_size = 10000):
 
 
 
-#def visualize_cluster_traces_bokeh():
+# def visualize_cluster_traces_bokeh():
 
-#def visualize_cluster_traces_mpl():
+# def visualize_cluster_traces_mpl():
 
 
 def cluster_neuron_data(neuron_data, sample_size, window_size,
@@ -250,6 +255,7 @@ def compressive_sensing_1d_sklearn(signal, subsample_proportion, alpha= 0.001):
 
 
 def get_bayesian_information_criterion(max_clusters, data):
+	
 	"""
 	Wrapper function to get the bayesian information criterion 
 	to choose the number of clusters for a given dataset. 
@@ -257,15 +263,16 @@ def get_bayesian_information_criterion(max_clusters, data):
 	Params
 	--------
 
-	* max_clusters
+	max_clusters()
 
-	* data
+	data ()
 
 
 	Returns
 	--------
 
-	* bic
+	bic()
+
 	"""
 
 
@@ -286,9 +293,26 @@ def make_cluster_trace_plot(clus_num, clus_neurons, time_arr, max_ix, fill_color
 	
 	Params
 	--------
+	clus_num ()
+	
+	clus_neurons() 
+	
+	time_arr ()
+	
+	max_ix()
+	
+	fill_color()
+	
+	line_color()
+
+
+	**kwargs):
 
 	Returns 
 	--------
+
+	fig (bokeh.figure)
+		Trace lineplot for a cluster of neurons. 
 
 	"""
 	ptiles = np.percentile(clus_neurons, [2.5, 97.5], axis = 0)
@@ -299,11 +323,12 @@ def make_cluster_trace_plot(clus_num, clus_neurons, time_arr, max_ix, fill_color
 	y_min = ptiles[0].min()
 	y_max = ptiles[1].max()
 
+	# Initialize bokeh figure
 	p = figure(
 	    plot_width=600,
 	    #plot_height=300,
 	    y_range=(y_min - 0.1, y_max + 0.05),
-	    x_axis_label="seconds",
+	    x_axis_label="time (seconds)",
 	    y_axis_label = 'activity',
 	    title = 'cluster ' + str(clus_num),
 	    **kwargs	    
@@ -311,14 +336,14 @@ def make_cluster_trace_plot(clus_num, clus_neurons, time_arr, max_ix, fill_color
 
 	if max_ix is not None: 
 		
-		# Plot mean line 
+		# Plot mean trace 
 		p.line(x=time_arr[:max_ix], y=mean_neuron[:max_ix], line_width=3, line_color = line_color)
 
-		# Plot percentiles 
-		fig = bebi103.viz.fill_between(
-		    x1 = t[:max_ix] , #
+		# Plot percentiles using Bebi103 function 
+		fig = fill_between(
+		    x1 = time_arr[:max_ix] , #
 		    y1 = ptiles[0, :max_ix],#
-		    x2 = t[:max_ix], 
+		    x2 = time_arr[:max_ix], 
 		    y2 = ptiles[1, :max_ix],
 		    patch_kwargs = {'fill_alpha' : 0.4, 'fill_color': fill_color},
 		    line_kwargs = {'line_color': line_color },
@@ -352,19 +377,41 @@ def trace_plot_all_clusters(processed_neurons, clus_df, time_arr, label_col,  ix
 	for visualization of clustering results. 
 	
 	Params
-	--------
+	-------
+
+	processed_neurons()
+
+	clus_df ()
+
+	time_arr()
+
+	label_col() 
+
+	ix_col()
+	
+	color_palette (cc. default= None)
+	
+	max_ix (default= None)
+	
+	clus_num_list (default= None)
+	
+	**kwargs 
 
 	Returns 
 	--------
 
-	* fig_list
+	fig_list (list of bokeh.figures)
+		List of plots ready to be visualized with bokeh.layouts
 	
 	"""
 
-	if clus_nums == None:
-		clus_nums = clus_df[label_col].unique()
-	else:
-		pass
+	# if clus_nums == None:
+
+	clus_nums = clus_df[label_col].unique()
+
+
+	# else:
+	# 	pass
 
 	if max_ix == None: 
 		max_ix = len(time_arr)
@@ -376,11 +423,16 @@ def trace_plot_all_clusters(processed_neurons, clus_df, time_arr, label_col,  ix
 
 	fig_list = []
 
-
+	# Make clusterPlot for each cluster
 	for clus in clus_nums: 
 
 		# Extract cluster data 
 		clus_ixs_ = clus_df[clus_df[label_col] == clus][ix_col].values
+
+		# Extract data for given cluster with indices
+		clus_data_ = processed_neurons[clus_ixs_]
+
+		# Get cluster traceplot 
 
 		trace_clus= make_cluster_trace_plot(
 			clus,
