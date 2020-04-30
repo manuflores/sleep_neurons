@@ -15,8 +15,11 @@ import colorcet as cc
 import bokeh 
 import holoviews as hv 
 from bebi103.viz import fill_between
+import networkx as nx
 
 
+from sklearn.neighbors import NearestNeighbors
+from sklearn.metrics import pairwise_distances
 from sklearn.cluster import DBSCAN
 from sklearn.preprocessing import StandardScaler 
 from sklearn.decomposition import IncrementalPCA as iPCA
@@ -30,14 +33,10 @@ import scipy.fftpack as spfft
 import cvxpy as cvx
 
 
-
-
 @njit
 def rolling_mean_numba(x, window_size= 30):
     cumsum = np.cumsum(x)
     return (cumsum[window_size:] - cumsum[:-window_size]) / float(window_size)
-
-
 
 
 def load_ahrens_data_figshare(path, 
@@ -122,10 +121,8 @@ def cluster_neuron_data(neuron_data, sample_size, window_size,
     	**{'window_size':window_size}
 	)
 
-	# Normalize data 
-
+	# Normalize data to be standard normal, i.e., with mean = 0, var = 1
 	scaler = StandardScaler()
-
 	normalized_neurons = scaler.fit_transform(processed_neurons)
 
 	# Apply PCA to processed neurons
@@ -155,6 +152,8 @@ def cluster_neuron_data(neuron_data, sample_size, window_size,
 
 	return rand_ixs, plot_df
 
+
+#def compressive_sensing_reconstruction_1d():
 
 
 def compressive_sensing_1d_cvxpy(signal, subsample_proportion): 
@@ -254,33 +253,91 @@ def compressive_sensing_1d_sklearn(signal, subsample_proportion, alpha= 0.001):
 	return reconstructed_sklearn
 
 
+def get_knn_graph(data, n_neighbors = 30, **kwargs): 
+    """
+    Wrapper function to generate a kNN graph using sklearn and networkx. 
+    
+    """
+    # Initialize Nearest Neighbors graph learning
+    knn = NearestNeighbors(n_neighbors,**kwargs).fit(data)
+    
+    # Get adjacency matrix in sparse format
+    knn_adjacency_mat = knn.kneighbors_graph(data)
+    
+    # Convert to nx.Graph object
+    knn_graph = nx.from_scipy_sparse_matrix(knn_adjacency_mat)
+    
+    return knn_graph
+
+
+
+def get_graph2vec_from_knn(list_of_data, n_neighbors, knn_kwargs={}, graph2vec_kwargs={}): 
+    
+    """
+    Wrapper function to make a graph2vec embedding directly from a list of datasets. 
+    
+    Params 
+    ---------
+    list_of_data(array-like)
+        List of datasets. Datasets could be pd.Dataframes or Numpy arrays with numerical 
+        values only. 
+    
+    """
+    
+    graph_list = [
+        get_knn_graph(data, n_neighbors, **knn_kwargs)
+    ]
+    
+    # Initialize and fit model
+    if 'dimensions' not in graph2vec_kwargs: 
+        graph2vec_kwargs['dimensions'] = 20
+    
+    # Initialize and fit graph2vec model to networks
+    model = Graph2Vec(**graph2vec_kwargs)
+    model.fit(graph_list)
+    
+    # Get the vector embeddings
+    vector_embedding = model.get_embedding()
+    
+    return vector_embedding
+
+
+
 def get_bayesian_information_criterion(max_clusters, data):
 	
 	"""
-	Wrapper function to get the bayesian information criterion 
-	to choose the number of clusters for a given dataset. 
+	Returns the bayesian information criterion for a number of Gaussian Mixture models.
+	This is aimed to choose the number of clusters for a given dataset. 
+
+	The number of clusters that minimizes the Bayesian information criterion, maximizes 
+	the likelihood of the model best explaining the dataset. 
 
 	Params
 	--------
 
-	max_clusters()
+	max_clusters(int)
+		Maximum number of clusters to run against. 
 
-	data ()
+	data (array-like or pd.DataFrame)
+		Dataset (n_samples, n_variables) to be clustered
 
 
 	Returns
 	--------
 
-	bic()
+	bic(list)
+		Bayesian information criterion score for each model. 
 
 	"""
 
-
+	# Initialize array for the number of clusters
 	n_components = np.arange(1, max_clusters)
 
+	# Run a GMM model for each of the number of components
 	models = [GMM(n, covariance_type='full', random_state=0).fit(data)
 	          for n in n_components]
 
+	# Extract the Schwarz (bayesian) information criterion for each model
 	bic = [m.bic(data) for m in models]
 
 	return bic 
@@ -289,24 +346,37 @@ def get_bayesian_information_criterion(max_clusters, data):
 def make_cluster_trace_plot(clus_num, clus_neurons, time_arr, max_ix, fill_color, line_color, **kwargs):
 
 	"""
-	Wrapper function to make a single cluster trace plot. 
+	Wrapper function to make a single cluster trace plot. It makes use of the 
+	bebi103.viz.fill_between function. 
 	
 	Params
 	--------
-	clus_num ()
+	clus_num (int)
+		Number of the cluster to be plotted. This is used for the title of the plot only.  
 	
-	clus_neurons() 
+	clus_neurons (array-like or pd.DataFrame) 
+		Cluster of neurons. It has a shape of (n_neurons, n_timepoints) unless otherwise stated.
+		This could also work in the frequency domain or other representation of the data. 
 	
-	time_arr ()
+	time_arr (array-like)
+		Time array to be plotted. It should have a shape of (1, n_timepoints). It is intended 
+		to be in seconds. If it is not, it should be explicitly specified using the x_axis_label 
+		keyword argument. 
 	
-	max_ix()
+	max_ix (int)
+		Maximum index to visualize the traceplots. 
 	
-	fill_color()
+	fill_color (str)
+		RGB color for the percentile shading, as a hex string. We recommend to use the http://colorbrewer2.org/ website or 
+		the Colorcet library https://colorcet.holoviz.org/user_guide/index.html. 
 	
-	line_color()
+	line_color (str)
+		RGB color for the mean trace line.
 
 
-	**kwargs):
+	**kwargs
+		Keyword arguments supplied to the bokeh.figure. 
+
 
 	Returns 
 	--------
@@ -315,25 +385,38 @@ def make_cluster_trace_plot(clus_num, clus_neurons, time_arr, max_ix, fill_color
 		Trace lineplot for a cluster of neurons. 
 
 	"""
+
+	# Compute 95th percentiles of cluster neurons
 	ptiles = np.percentile(clus_neurons, [2.5, 97.5], axis = 0)
 
+	# Compute mean neuron 
 	mean_neuron = np.mean(clus_neurons, axis = 0)
 
 	# Get minimum and maximum value for setting axes ranges
 	y_min = ptiles[0].min()
 	y_max = ptiles[1].max()
 
+	if 'plot_width' not in kwargs: 
+		kwargs['plot_width'] = 600
+
+	if 'plot_height' not in kwargs: 
+		kwargs['plot_height'] = 300
+
+	if 'title' not in kwargs:
+		kwargs['title'] = 'cluster ' + str(clus_num)
+
+	if 'x_axis_label' not in kwargs:
+		x_axis_label="time (seconds)"
+
+
 	# Initialize bokeh figure
 	p = figure(
-	    plot_width=600,
-	    #plot_height=300,
 	    y_range=(y_min - 0.1, y_max + 0.05),
-	    x_axis_label="time (seconds)",
 	    y_axis_label = 'activity',
-	    title = 'cluster ' + str(clus_num),
 	    **kwargs	    
 	)
 
+	# Make plot for a limited index value across time 
 	if max_ix is not None: 
 		
 		# Plot mean trace 
@@ -350,7 +433,7 @@ def make_cluster_trace_plot(clus_num, clus_neurons, time_arr, max_ix, fill_color
 		    p = p 
 		)
 		
-
+	# Make plot for all of the timepoints
 	else: 
 
 		# Plot mean line 
@@ -379,23 +462,36 @@ def trace_plot_all_clusters(processed_neurons, clus_df, time_arr, label_col,  ix
 	Params
 	-------
 
-	processed_neurons()
+	processed_neurons(array-like)
+		np.array with shape (n_neurons, n_timepoints) after the data smoothing or transformation. 
 
-	clus_df ()
+	clus_df (pd.DataFrame)
+		Pandas df containing the cluster labels for each neuron. The indices of this dataframe
+		must correspond with the processed neurons. 
 
-	time_arr()
+	time_arr(array-like)
+		Time array to be plotted. It should have a shape of (1, n_timepoints). It is intended 
+		to be in seconds. If it is not, it should be explicitly specified using the x_axis_label 
+		keyword argument.
 
-	label_col() 
+	label_col(str) 
+		Name of the column which contains the cluster labels. 
 
-	ix_col()
+	ix_col(str) 
+		As of now, the this parameter is intended to keep track of the original indices explicitly. 
+		In a future version this could be ignored and set from the main clustering function. 
 	
-	color_palette (cc. default= None)
+	color_palette (array-like)
+		List of RGB colors in HEX format. We recommend using the palettes of colorcet https://colorcet.holoviz.org/user_guide/index.html. 
+
+	max_ix (int, default= None)
+		Maximum index to be considered for the plot. Default is to use all timepoints. 
 	
-	max_ix (default= None)
+	clus_num_list (array-like, default= None)
+		List of number of clusters. If not supplied, inferred from the clus_df. 
 	
-	clus_num_list (default= None)
-	
-	**kwargs 
+	**kwargs
+		Keyword arguments supplied to the bokeh.figure. 
 
 	Returns 
 	--------
@@ -405,13 +501,15 @@ def trace_plot_all_clusters(processed_neurons, clus_df, time_arr, label_col,  ix
 	
 	"""
 
-	# if clus_nums == None:
+	# Extract the number of clusters 
+	if clus_num_list is None: 
+		try: 
+			clus_num_list = clus_df[label_col].unique()
+		#else: 
+		#	clus_num_list = np.arange(clus_df.label_col.astype(int))
+		except: 
+			print('Cluster number list was not supplied and could not be inferred. ')
 
-	clus_nums = clus_df[label_col].unique()
-
-
-	# else:
-	# 	pass
 
 	if max_ix == None: 
 		max_ix = len(time_arr)
@@ -421,10 +519,12 @@ def trace_plot_all_clusters(processed_neurons, clus_df, time_arr, label_col,  ix
 	if color_palette == None:
 		color_palette = cc.glasbey_cool
 
+
+	# Initialize list of figures. 
 	fig_list = []
 
 	# Make clusterPlot for each cluster
-	for clus in clus_nums: 
+	for clus in clus_num_list: 
 
 		# Extract cluster data 
 		clus_ixs_ = clus_df[clus_df[label_col] == clus][ix_col].values
