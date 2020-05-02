@@ -153,6 +153,186 @@ def cluster_neuron_data(neuron_data, sample_size, window_size,
 	return rand_ixs, plot_df
 
 
+
+
+
+def cluster_neuron_data_v2(neuron_data, pca_components= 0.6, n_neighbors= 30, max_clus = 20, **kwargs):
+
+	"""
+	Wrapper for version 2 of the pipeline: GMM clustering  
+	"""
+
+
+	# Normalize data to be standard normal, i.e., with mean = 0, var = 1
+	scaler = StandardScaler()
+	normalized_neurons = scaler.fit_transform(neuron_data)
+
+	# Apply PCA to processed neurons
+	pcs = PCA(n_components = pca_components).fit_transform(normalized_neurons)
+
+	three_pcs = pcs[:, :3]
+
+	# Apply UMAP to neurons' principal components
+	embedding = umap(
+	    min_dist =0, 
+	    n_neighbors=n_neighbors,
+	    n_components = 2, 
+	    random_state = 3287354).fit_transform(pcs)
+
+	
+	# Compute Shwarz information criterion
+	bic = get_bayesian_information_criterion(max_clus, embedding)
+	
+	# Get optimal number of clusters
+	n_clusters = np.argmin(bic)
+
+	# Initialize clustering 
+
+	clustering_model = bGMM(n_clusters).fit(embedding)
+
+
+	# Get cluster labels 
+	cluster_labels = clustering_model.predict(embedding)
+
+
+	# Make a dataframe for visualization 
+	plot_df = pd.DataFrame(
+	    np.concatenate([embedding, three_pcs, cluster_labels.reshape(-1,1)], axis = 1),
+	    columns = ['UMAP_1', 'UMAP_2', 'PCA_1', 'PC_2', 'PC_3' 'GMM_labels'])
+
+
+	return rand_ixs, plot_df
+
+def get_z_slice(path_to_mat, fish_number, data_path , slice_ix = 13, return_df = False):
+
+	"""
+
+	Params
+	--------
+
+	path_to_mat(str)
+		Path to the .mat file containing the anatomical data. 
+
+	slice_ix(int)
+		Index of the slice to get. 
+
+	"""
+
+	# Load mat file 
+	dat = sio.loadmat(path_to_mat)
+
+	# Extract fish voxels 
+	fish_voxels = dat['data']['anat_stack'][0][0]
+
+
+	z_slice = fish_voxels[:, :, slice_ix]
+
+	df_z_slice = pd.DataFrame(z_slice)
+
+	df_z_slice.to_csv(data_path + 'z_slice' + '_'+ str(fish_number) + '.csv', index = False )
+
+	if return_df == True:
+		return df_z_slice
+
+	else: 
+		pass 
+
+
+
+def get_xy_coordinates(path_to_mat, fish_number, data_path, return_df = False):
+	
+	"""
+	Exports the XYZ coordinates of valid neurons. 
+
+	Params 
+	---------
+
+	path_to_mat(str)
+		Path to the .mat file containing the anatomical data. 
+
+	fish_number(int)
+		Number of the fish to retrieve data from.
+
+	data_path (str)
+		Path to the datasets folder to export the df. 
+
+	return_df (bool)
+		If True, returns the dataframe. 
+
+	Returns 
+	---------
+
+	df_xyz (pd.DataFrame)
+		XY coordinates for the fish analyzed. 
+
+	"""
+
+	# Load mat file 
+	dat = sio.loadmat(path_to_mat)
+
+	# Get xyz coords 
+	xyz_coordinates = dat['data']['CellXYZ'][0][0]
+
+	# Get invalid ixs
+	invalid_ixs = dat['data']['IX_inval_anat'][0][0].flatten()
+
+	# Initialize boolean mask 
+	mask = np.ones(n_neurons, dtype = bool)
+
+	# Set to False on invalid ixs
+	mask[invalid_ixs] = False
+
+	# Get valid neurons
+	xyz = xyz_coordinates[mask, :2]
+
+	# Make dataframe
+	df_xyz = pd.DataFrame(xyz, columns = ['X', 'Y'])
+
+	# Export df 
+	df_xyz.to_csv(data_path + 'xyz_coords' +'_' + str(fish_number) + '.csv', index = False)
+
+
+	if return_df == True:
+		return df_xyz
+
+	else : 
+		pass
+
+
+def plot_cluster_on_brain_plt(clus_number, cluster_labels, color): 
+    """
+    Returns a scatterplot of the neurons in a cluster on top of
+    a z-slice of an image the zebrafish brain. 
+        
+    Params 
+    -----
+    clus_number(int)
+        Number of cluster to plot. 
+    cluster_labels(array-like)
+        List containing the cluster label for each neuron. 
+    color (str)
+        Color in HEX format. 
+    
+    Returns
+    --------
+    
+    fig (matplotlib.figure.Figure)
+        Overlay of scatterplot of neurons on image of the brain.
+    
+    """
+    # Initialize figure 
+    fig, ax = plt.subplots()
+    
+    # Plot slice of z-axis of the brain
+    ax.imshow(z_slice, cmap = 'bone')
+    
+    # Plot neurons scatterplot 
+    ax.scatter(neurons_x[cluster_labels == clus_number],neurons_y[cluster_labels == clus_number], s = 0.15,
+                alpha = 0.08,color = color, label = 'cluster ' + str(clus_number))
+    
+    return fig
+
+
 #def compressive_sensing_reconstruction_1d():
 
 
@@ -253,6 +433,19 @@ def compressive_sensing_1d_sklearn(signal, subsample_proportion, alpha= 0.001):
 	return reconstructed_sklearn
 
 
+def dct2(x):
+    
+    """Two-dimensional discrete cosine transform wrapper."""
+
+    return spfft.dct(spfft.dct(x.T, norm='ortho', axis=0).T, norm='ortho', axis=0)
+
+def idct2(x):
+    
+    """Two-dimensional inverse consine transform. """
+    
+    return spfft.idct(spfft.idct(x.T, norm='ortho', axis=0).T, norm='ortho', axis=0)
+
+
 def get_knn_graph(data, n_neighbors = 30, **kwargs): 
     """
     Wrapper function to generate a kNN graph using sklearn and networkx. 
@@ -342,8 +535,7 @@ def get_bayesian_information_criterion(max_clusters, data):
 
 	return bic 
 
-
-def make_cluster_trace_plot(clus_num, clus_neurons, time_arr, max_ix, fill_color, line_color, **kwargs):
+def individual_trace_plot(clus_num, clus_neurons, time_arr, max_ix, fill_color, line_color, **kwargs):
 
 	"""
 	Wrapper function to make a single cluster trace plot. It makes use of the 
@@ -372,6 +564,53 @@ def make_cluster_trace_plot(clus_num, clus_neurons, time_arr, max_ix, fill_color
 	
 	line_color (str)
 		RGB color for the mean trace line.
+
+
+	**kwargs
+		Keyword arguments supplied to the bokeh.figure. 
+
+
+	Returns 
+	--------
+
+	fig (bokeh.figure)
+		Trace lineplot for a cluster of neurons. 
+
+	"""
+
+
+def make_cluster_trace_plot(clus_num, clus_neurons, time_arr, max_ix, fill_color, line_color, n_samples = 10, plot_summary = False, **kwargs):
+
+	"""
+	Wrapper function to make a single cluster trace plot. It makes use of the 
+	bebi103.viz.fill_between function. 
+	
+	Params
+	--------
+	clus_num (int)
+		Number of the cluster to be plotted. This is used for the title of the plot only.  
+	
+	clus_neurons (array-like or pd.DataFrame) 
+		Cluster of neurons. It has a shape of (n_neurons, n_timepoints) unless otherwise stated.
+		This could also work in the frequency domain or other representation of the data. 
+	
+	time_arr (array-like)
+		Time array to be plotted. It should have a shape of (1, n_timepoints). It is intended 
+		to be in seconds. If it is not, it should be explicitly specified using the x_axis_label 
+		keyword argument. 
+	
+	max_ix (int)
+		Maximum index to visualize the traceplots. 
+	
+	fill_color (str)
+		RGB color for the percentile shading, as a hex string. We recommend to use the http://colorbrewer2.org/ website or 
+		the Colorcet library https://colorcet.holoviz.org/user_guide/index.html. 
+	
+	line_color (str)
+		RGB color for the mean trace line.
+
+	n_samples(int)
+		Number of traces to plot 
 
 
 	**kwargs
