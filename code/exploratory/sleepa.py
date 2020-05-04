@@ -104,6 +104,7 @@ def subsample_data(neuron_data, sample_size = 10000):
     return rand_ix, sample_neurons 
 
 
+
 def cluster_neuron_data(neuron_data, sample_size, window_size,
 	pca_components= 20, n_neighbors= 30, **kwargs):
 
@@ -354,6 +355,69 @@ def idct2(x):
     """Two-dimensional inverse consine transform. """
     
     return spfft.idct(spfft.idct(x.T, norm='ortho', axis=0).T, norm='ortho', axis=0)
+
+
+
+def get_wavelet_transform(signal, time, scales, waveletname = 'cmor'):
+    
+    """
+    Returns flattened array of scaleogram of a 1D signal.
+    
+    Params
+    --------
+    
+    Returns
+    --------
+    
+    """
+    
+    
+    dt = time[1] - time[0]
+    [coefficients, frequencies] = pywt.cwt(signal, scales, waveletname, dt)
+    log_power = np.log((abs(coefficients)) ** 2)
+    
+    wavelet_transform = log_power.flatten()
+    
+    return wavelet_transform
+
+
+
+
+def get_wavelet_basis(neuron_data, time, scales, wavelet = 'gaus5'):
+    
+    """
+    Compute the wavelet transform over the complete whole brain dataset. 
+    
+    Params 
+    --------
+    
+    neuron_data ()
+
+	time (array-like)
+
+	scales ( )
+
+	wavelet (str, default = 'gaus5')
+
+    Returns
+    --------
+    
+    """
+    
+    # Apply wavelet transform to each row 
+    wavelet_basis = np.apply_along_axis(
+        func1d= get_wavelet_transform,
+        axis=1,
+        arr = neuron_data,
+        **{
+            'time':time,
+            'scales': scales,
+            'waveletname' : wavelet
+        }
+    )
+    
+    return wavelet_basis
+
 
 
 
