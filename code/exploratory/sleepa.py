@@ -1,8 +1,7 @@
 # -*- coding: utf-8 -*-
 # sleep_neurons
 
-
-from umap import UMAP as umap 
+# Numerical and data wrangling libraries 
 from numba import njit 
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -10,14 +9,23 @@ import scipy.io as sio
 import seaborn as sns
 import numpy as np 
 import h5py
-from bokeh.plotting import figure
-import colorcet as cc 
-import bokeh 
-import holoviews as hv 
-from bebi103.viz import fill_between
+import scipy.fftpack as spfft
+import cvxpy as cvx
 import networkx as nx
 
+# Interactive plotting 
 
+import bokeh 
+from bokeh.plotting import figure
+import holoviews as hv 
+import bebi103
+from bebi103.viz import fill_between
+import panel as pn
+import colorcet as cc 
+
+
+# Unsupervised learning stack 
+from umap import UMAP as umap 
 from sklearn.neighbors import NearestNeighbors
 from sklearn.metrics import pairwise_distances
 from sklearn.cluster import DBSCAN
@@ -29,9 +37,6 @@ from sklearn.mixture import BayesianGaussianMixture as bGMM
 from sklearn.mixture import GaussianMixture as GMM
 
 
-import scipy.fftpack as spfft
-import cvxpy as cvx
-
 
 @njit
 def rolling_mean_numba(x, window_size= 30):
@@ -39,18 +44,19 @@ def rolling_mean_numba(x, window_size= 30):
     return (cumsum[window_size:] - cumsum[:-window_size]) / float(window_size)
 
 
-def load_ahrens_data_figshare(path, 
-    #norm_method = 'rolling_mean'
-    ):
+#def get_all_datasets(download_dir = '../data/'):
+	#"""Helper function to download the raw data from the Janelia FigShare repo. """
+
+	# Download data from figshare 
+    # Uncompress 
+
+def load_ahrens_data_figshare(path):
 
     """
     Loads data from the FigShare repository. 
     The data comes from the Neuron 201? paper.
 
     """
-
-    # Download data from figshare 
-    # Uncompress 
 
     # Load data 
     dat = h5py.File(path, 'r')
@@ -96,12 +102,6 @@ def subsample_data(neuron_data, sample_size = 10000):
     sample_neurons = neuron_data[rand_ix, :]
 
     return rand_ix, sample_neurons 
-
-
-
-# def visualize_cluster_traces_bokeh():
-
-# def visualize_cluster_traces_mpl():
 
 
 def cluster_neuron_data(neuron_data, sample_size, window_size,
@@ -155,6 +155,47 @@ def cluster_neuron_data(neuron_data, sample_size, window_size,
 
 
 
+def get_bayesian_information_criterion(max_clusters, data):
+	
+	"""
+	Returns the bayesian information criterion for a number of Gaussian Mixture models.
+	This is aimed to choose the number of clusters for a given dataset. 
+
+	The number of clusters that minimizes the Bayesian information criterion, maximizes 
+	the likelihood of the model best explaining the dataset. 
+
+	Params
+	--------
+
+	max_clusters(int)
+		Maximum number of clusters to run against. 
+
+	data (array-like or pd.DataFrame)
+		Dataset (n_samples, n_variables) to be clustered
+
+
+	Returns
+	--------
+
+	bic(list)
+		Bayesian information criterion score for each model. 
+
+	"""
+
+	# Initialize array for the number of clusters
+	n_components = np.arange(1, max_clusters)
+
+	# Run a GMM model for each of the number of components
+	models = [GMM(n, covariance_type='full', random_state=0).fit(data)
+	          for n in n_components]
+
+	# Extract the Schwarz (bayesian) information criterion for each model
+	bic = [m.bic(data) for m in models]
+
+	return bic 
+
+
+
 
 def cluster_neuron_data_v2(neuron_data, pca_components= 0.6, n_neighbors= 30, max_clus = 20, **kwargs):
 
@@ -186,10 +227,8 @@ def cluster_neuron_data_v2(neuron_data, pca_components= 0.6, n_neighbors= 30, ma
 	# Get optimal number of clusters
 	n_clusters = np.argmin(bic)
 
-	# Initialize clustering 
-
+	# Initialize Gaussian Mixture model 
 	clustering_model = bGMM(n_clusters).fit(embedding)
-
 
 	# Get cluster labels 
 	cluster_labels = clustering_model.predict(embedding)
@@ -202,135 +241,6 @@ def cluster_neuron_data_v2(neuron_data, pca_components= 0.6, n_neighbors= 30, ma
 
 
 	return rand_ixs, plot_df
-
-def get_z_slice(path_to_mat, fish_number, data_path , slice_ix = 13, return_df = False):
-
-	"""
-
-	Params
-	--------
-
-	path_to_mat(str)
-		Path to the .mat file containing the anatomical data. 
-
-	slice_ix(int)
-		Index of the slice to get. 
-
-	"""
-
-	# Load mat file 
-	dat = sio.loadmat(path_to_mat)
-
-	# Extract fish voxels 
-	fish_voxels = dat['data']['anat_stack'][0][0]
-
-
-	z_slice = fish_voxels[:, :, slice_ix]
-
-	df_z_slice = pd.DataFrame(z_slice)
-
-	df_z_slice.to_csv(data_path + 'z_slice' + '_'+ str(fish_number) + '.csv', index = False )
-
-	if return_df == True:
-		return df_z_slice
-
-	else: 
-		pass 
-
-
-
-def get_xy_coordinates(path_to_mat, fish_number, data_path, return_df = False):
-	
-	"""
-	Exports the XYZ coordinates of valid neurons. 
-
-	Params 
-	---------
-
-	path_to_mat(str)
-		Path to the .mat file containing the anatomical data. 
-
-	fish_number(int)
-		Number of the fish to retrieve data from.
-
-	data_path (str)
-		Path to the datasets folder to export the df. 
-
-	return_df (bool)
-		If True, returns the dataframe. 
-
-	Returns 
-	---------
-
-	df_xyz (pd.DataFrame)
-		XY coordinates for the fish analyzed. 
-
-	"""
-
-	# Load mat file 
-	dat = sio.loadmat(path_to_mat)
-
-	# Get xyz coords 
-	xyz_coordinates = dat['data']['CellXYZ'][0][0]
-
-	# Get invalid ixs
-	invalid_ixs = dat['data']['IX_inval_anat'][0][0].flatten()
-
-	# Initialize boolean mask 
-	mask = np.ones(n_neurons, dtype = bool)
-
-	# Set to False on invalid ixs
-	mask[invalid_ixs] = False
-
-	# Get valid neurons
-	xyz = xyz_coordinates[mask, :2]
-
-	# Make dataframe
-	df_xyz = pd.DataFrame(xyz, columns = ['X', 'Y'])
-
-	# Export df 
-	df_xyz.to_csv(data_path + 'xyz_coords' +'_' + str(fish_number) + '.csv', index = False)
-
-
-	if return_df == True:
-		return df_xyz
-
-	else : 
-		pass
-
-
-def plot_cluster_on_brain_plt(clus_number, cluster_labels, color): 
-    """
-    Returns a scatterplot of the neurons in a cluster on top of
-    a z-slice of an image the zebrafish brain. 
-        
-    Params 
-    -----
-    clus_number(int)
-        Number of cluster to plot. 
-    cluster_labels(array-like)
-        List containing the cluster label for each neuron. 
-    color (str)
-        Color in HEX format. 
-    
-    Returns
-    --------
-    
-    fig (matplotlib.figure.Figure)
-        Overlay of scatterplot of neurons on image of the brain.
-    
-    """
-    # Initialize figure 
-    fig, ax = plt.subplots()
-    
-    # Plot slice of z-axis of the brain
-    ax.imshow(z_slice, cmap = 'bone')
-    
-    # Plot neurons scatterplot 
-    ax.scatter(neurons_x[cluster_labels == clus_number],neurons_y[cluster_labels == clus_number], s = 0.15,
-                alpha = 0.08,color = color, label = 'cluster ' + str(clus_number))
-    
-    return fig
 
 
 #def compressive_sensing_reconstruction_1d():
@@ -446,9 +356,10 @@ def idct2(x):
     return spfft.idct(spfft.idct(x.T, norm='ortho', axis=0).T, norm='ortho', axis=0)
 
 
+
 def get_knn_graph(data, n_neighbors = 30, **kwargs): 
     """
-    Wrapper function to generate a kNN graph using sklearn and networkx. 
+    Wrapper function to generate a kNN graph using sklearn and NetworkX. 
     
     """
     # Initialize Nearest Neighbors graph learning
@@ -495,45 +406,122 @@ def get_graph2vec_from_knn(list_of_data, n_neighbors, knn_kwargs={}, graph2vec_k
     return vector_embedding
 
 
+def get_z_slice(path_to_mat, fish_number, data_path , slice_ix = 13, return_df = False):
 
-def get_bayesian_information_criterion(max_clusters, data):
-	
 	"""
-	Returns the bayesian information criterion for a number of Gaussian Mixture models.
-	This is aimed to choose the number of clusters for a given dataset. 
-
-	The number of clusters that minimizes the Bayesian information criterion, maximizes 
-	the likelihood of the model best explaining the dataset. 
 
 	Params
 	--------
 
-	max_clusters(int)
-		Maximum number of clusters to run against. 
+	path_to_mat(str)
+		Path to the .mat file containing the anatomical data. 
 
-	data (array-like or pd.DataFrame)
-		Dataset (n_samples, n_variables) to be clustered
+	fish_number (int)
+		Number of the studied fish according to the Chen et al. notation. 
 
+	data_path (str)
+		Path to store the dataset. 
 
-	Returns
-	--------
+	slice_ix(int)
+		Index of the slice to get. 
 
-	bic(list)
-		Bayesian information criterion score for each model. 
+	return_df (bool)
+		If set to True it will return the dataframe. 
 
 	"""
 
-	# Initialize array for the number of clusters
-	n_components = np.arange(1, max_clusters)
+	# Load mat file 
+	dat = sio.loadmat(path_to_mat)
 
-	# Run a GMM model for each of the number of components
-	models = [GMM(n, covariance_type='full', random_state=0).fit(data)
-	          for n in n_components]
+	# Extract fish voxels 
+	fish_voxels = dat['data']['anat_stack'][0][0]
 
-	# Extract the Schwarz (bayesian) information criterion for each model
-	bic = [m.bic(data) for m in models]
+	# Get z_slice
+	z_slice = fish_voxels[:, :, slice_ix]
 
-	return bic 
+	# Convert to dataframe
+	df_z_slice = pd.DataFrame(z_slice)
+
+	# Export dataframe 
+	df_z_slice.to_csv(data_path + 'z_slice' + '_'+ str(fish_number) + '.csv', index = False )
+
+	if return_df == True:
+		return df_z_slice
+
+	else: 
+		pass 
+
+#def get_z_slice(data_path):
+
+	"""
+	"""
+
+#	zslice = pd.read_csv()
+
+
+
+def get_xy_coordinates(path_to_mat, fish_number, data_path, return_df = False):
+	
+	"""
+	Exports the XYZ coordinates of valid neurons. 
+
+	Params 
+	---------
+
+	path_to_mat(str)
+		Path to the .mat file containing the anatomical data. 
+
+	fish_number(int)
+		Number of the fish to retrieve data from.
+
+	data_path (str)
+		Path to the datasets folder to export the df. 
+
+	return_df (bool)
+		If True, returns the dataframe. 
+
+	Returns 
+	---------
+
+	df_xyz (pd.DataFrame)
+		XY coordinates for the fish analyzed. 
+
+	"""
+
+	# Load mat file 
+	dat = sio.loadmat(path_to_mat)
+
+	# Get xyz coords 
+	xyz_coordinates = dat['data']['CellXYZ'][0][0]
+
+	# Get invalid ixs
+	invalid_ixs = dat['data']['IX_inval_anat'][0][0].flatten()
+
+	# Get number of neurons in data
+	n_neurons= xyz_coordinates.shape[0] # in xyz_coords
+
+	# Initialize boolean mask 
+	mask = np.ones(n_neurons, dtype = bool)
+
+	# Set to False on invalid ixs
+	mask[invalid_ixs] = False
+
+	# Get valid neurons
+	xyz = xyz_coordinates[mask, :2]
+
+	# Make dataframe
+	df_xyz = pd.DataFrame(xyz, columns = ['X', 'Y'])
+
+	# Export df 
+	df_xyz.to_csv(data_path + 'xyz_coords' +'_' + str(fish_number) + '.csv', index = False)
+
+
+	if return_df == True:
+		return df_xyz
+
+	else : 
+		pass
+
 
 def individual_trace_plot(clus_num, clus_neurons, time_arr, max_ix, fill_color, line_color, **kwargs):
 
@@ -691,6 +679,8 @@ def make_cluster_trace_plot(clus_num, clus_neurons, time_arr, max_ix, fill_color
 
 	return fig 
 
+
+
 def trace_plot_all_clusters(processed_neurons, clus_df, time_arr, label_col,  ix_col, color_palette = None,
 	max_ix= None, clus_num_list = None, **kwargs):
 	
@@ -785,4 +775,240 @@ def trace_plot_all_clusters(processed_neurons, clus_df, time_arr, label_col,  ix
 		fig_list.append(trace_clus)
 
 	return fig_list
+
+
+
+
+def brain_cluster_plot_plt(z_slice, xy_coords, clus_number, cluster_labels, color): 
+    """
+    Returns a scatterplot of the neurons in a cluster on top of
+    a z-slice of an image the zebrafish brain. 
+        
+    Params 
+    -----
+    clus_number(int)
+        Number of cluster to plot. 
+
+    cluster_labels(array-like)
+        List containing the cluster label for each neuron.
+
+    color (str)
+        Color in HEX format. 
+    
+    Returns
+    --------
+    
+    fig (matplotlib.figure.Figure)
+        Overlay of scatterplot of neurons on image of the brain.
+    
+    """
+
+    # Initialize figure 
+    fig, ax = plt.subplots()
+    
+    # Plot slice of z-axis of the brain
+    ax.imshow(z_slice, cmap = 'bone')
+
+    # Make x and y arrays 
+    neurons_x = xy_coords[:, 1]
+    neurons_y = xy_coords[:, 0]
+    
+    # Plot neurons scatterplot 
+    ax.scatter(
+    	neurons_x[cluster_labels == clus_number],
+    	neurons_y[cluster_labels == clus_number],
+    	s = 0.15,
+        alpha = 0.08,
+        color = color,
+        label = 'cluster ' + str(clus_number)
+	)
+    
+    return fig
+
+
+def brain_cluster_plot_bokeh(z_slice, xy_coords, clus_number, cluster_labels, color):
+    """
+    Returns a scatterplot of the neurons in a cluster on top of
+    a z-slice of an image the zebrafish brain. 
+        
+    Params 
+    -----
+    clus_number(int)
+        Number of cluster to plot. 
+
+    cluster_labels(array-like)
+        List containing the cluster label for each neuron.
+
+    color (str)
+        Color in HEX format. 
+    
+    Returns
+    --------
+    
+    p (bokeh.figure)
+        Overlay of scatterplot of neurons on interactive plot
+        of the brain.
+    """
+    
+    # Initialize z_slice plot 
+    p = bebi103.image.imshow(z_slice, title = 'cluster ' + str(clus_number), cmap = cc.gray)
+    
+    # Get x and y coordinates
+    neurons_x = xy_coords[:, 1]
+    neurons_y = xy_coords[:, 0]
+    
+    # Make scatter plot 
+    p.scatter(
+        neurons_x[cluster_labels == clus_number],
+        neurons_y[cluster_labels == clus_number],
+        color = color, 
+        size = 1.8, 
+        alpha = 0.4
+    )
+    
+    return p
+
+
+
+
+def get_all_brain_clus_bokeh(
+    z_slice, xy_coords, cluster_labels, max_clusters, palette, **kwargs
+):
+
+    """
+    Wrapper function to plot all clusters with bokeh. 
+    
+    Params
+    ---------
+    cluster_labels (array-like or pd.Series)
+        Cluster labels for each neuron. 
+    
+    palette (array-like)
+        List of HEX colors. 
+    
+    Returns
+    ---------
+    grid (bokeh.models.layouts.Column) 
+        Grid of plots. 
+    """
+
+    #  Initialize plot list
+    plot_list = []
+
+    #  Add individual cluster plot to list
+    for ix in np.arange(max_clusters):
+    
+        plot_list.append(
+            brain_cluster_plot_bokeh(
+            z_slice,
+            xy_coords,
+            clus_number=ix,
+            color=palette[ix], 
+            cluster_labels=cluster_labels
+            )
+        )
+    
+    # Generate gridplot 
+    grid = bokeh.layouts.gridplot(plot_list, ncols= int(max_clusters //2))
+
+    return grid
+
+
+
+def load_bright_palette():
+
+	"Load custom bright palette."
+	# Initialize custom palette 
+	bright_palette = [
+	    '#8dd3c7',
+	    '#762a83', 
+	    "#1debf2",
+	    "#fca903",
+	    "#3df514",
+	    "#a41df2",
+	    "#4b00bd",
+	    "#9aba9e",
+	    "#95fff2",
+	    '#e01df2',
+	    "#14f5f5",
+	    '#fccde5',
+	    '#ffffb3'
+	]
+
+	return bright_palette
+
+def get_style_bokeh():
+    
+    '''
+    Formats bokeh plotting enviroment similar 
+    to that used in Physical Biology of the Cell, 2nd edition.
+    Based on @gchure and @mrazomej's work.
+
+    '''
+
+    theme_json = {'attrs':
+            {'Figure': {
+                'background_fill_color': '#ffffff',
+                'outline_line_color': '#000000',
+            },
+            'Axis': {
+            'axis_line_color': "white",
+            'major_tick_in': 7,
+            'major_tick_line_width': 2,
+            'major_tick_line_color': "white",
+            'minor_tick_line_color': "grey",
+            'axis_label_text_font': 'Helvetica Neue',
+            'axis_label_text_font_style': 'normal'
+            },
+            'Grid': {
+                'grid_line_color': 'white',
+            },
+            'Legend': {
+                'background_fill_color': '#E3DCD0',
+                'border_line_color': '#FFFFFF',
+                'border_line_width': 1.5,
+                'background_fill_alpha': 0.5
+            },
+            'Text': {
+                'text_font_style': 'normal',
+               'text_font': 'Helvetica'
+            },
+            'Title': {
+                'background_fill_color': '#FFEDC0',
+                'text_font_style': 'normal',
+                'align': 'center',
+                'text_font': 'Helvetica Neue',
+                'offset': 2,
+            }}}
+
+    return theme_json
+
+
+
+
+def make_slider(): 
+
+	"""
+	Integer slider for z_slice function. 
+	"""
+	slider = pn.widgets.IntSlider(start= 0, end = 29, step = 1, value = 10 )
+	
+	return slider 
+
+
+#@pn.depends(slider.param.value)
+
+# def plot_zslice(slider): 
+	
+# 	"""
+# 	Helper function to generate a view of the fish anatomy across the z-axis
+# 	with a slider. 
+# 	"""
+
+#     zslide = fish_voxels[:, :, slider]
+
+#     im = rasterize(hv.Image(zslide).opts(cmap = 'viridis')).opts(width = 400, height = 600)
+
+#     return im
+
 
