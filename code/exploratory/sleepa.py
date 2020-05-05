@@ -5,13 +5,17 @@
 from numba import njit 
 import pandas as pd
 import matplotlib.pyplot as plt
+import networkx as nx
 import scipy.io as sio
 import seaborn as sns
 import numpy as np 
 import h5py
+
+# Signal processing libs
 import scipy.fftpack as spfft
+import pywt
 import cvxpy as cvx
-import networkx as nx
+
 
 # Interactive plotting 
 
@@ -238,10 +242,10 @@ def cluster_neuron_data_v2(neuron_data, pca_components= 0.6, n_neighbors= 30, ma
 	# Make a dataframe for visualization 
 	plot_df = pd.DataFrame(
 	    np.concatenate([embedding, three_pcs, cluster_labels.reshape(-1,1)], axis = 1),
-	    columns = ['UMAP_1', 'UMAP_2', 'PCA_1', 'PC_2', 'PC_3' 'GMM_labels'])
+	    columns = ['UMAP_1', 'UMAP_2', 'PCA_1', 'PC_2', 'PC_3', 'GMM_labels'])
 
 
-	return rand_ixs, plot_df
+	return plot_df
 
 
 #def compressive_sensing_reconstruction_1d():
@@ -357,25 +361,73 @@ def idct2(x):
     return spfft.idct(spfft.idct(x.T, norm='ortho', axis=0).T, norm='ortho', axis=0)
 
 
+def get_scaleogram(signal, time, scales, waveletname = 'cmor'):
+    
+    """
+    Returns a 2D scaleogram. 
+	
 
-def get_wavelet_transform(signal, time, scales, waveletname = 'cmor'):
+    """
+    
+    # Get the inter sampling time 
+    dt = time[1] - time[0]
+
+    # Compute wavelet transform 
+    [coefficients, frequencies] = pywt.cwt(signal, scales, waveletname, dt)
+
+    # Get the log power of signal 
+    log_power = np.log((abs(coefficients)) ** 2)
+    
+    
+    return log_power
+
+
+
+
+def get_wavelet_transform(signal, time, scales, waveletname = 'gaus5'):
     
     """
     Returns flattened array of scaleogram of a 1D signal.
+    Helper function to apply to a matrix where each row or column 
+    represents a signal or timeseries. 
     
     Params
     --------
+
+    signal (array-like)
+    	Array containing 1D signal. 
+    
+    time (array-like)
+    	Array of time corresponding to the time at which the signal
+    	was sampled. 
+
+    scales (array-like)
+    	Pseudo-frequencies, they have units of [signal units (SU) / freq].
+    	A high scale factor corresponds to smaller frequencies. 
+
+    waveletname (str, default = 'gaus5')
+    	Wavelet to perform the transform. 
     
     Returns
     --------
+
+    wavelet_transform (array-like)
+    	Flattened array of the log power of the wavelet transform. The log power is
+    	a matrix with shape (n_scales, n_timepoints), thus the flattened version
+    	will have (n_scales * n_timepoints, 1) dimensions. 
     
     """
     
-    
+    # Get the inter sampling time 
     dt = time[1] - time[0]
+
+    # Compute wavelet transform 
     [coefficients, frequencies] = pywt.cwt(signal, scales, waveletname, dt)
+    
+    # Get log power
     log_power = np.log((abs(coefficients)) ** 2)
     
+    # Flatten array 
     wavelet_transform = log_power.flatten()
     
     return wavelet_transform
@@ -391,13 +443,18 @@ def get_wavelet_basis(neuron_data, time, scales, wavelet = 'gaus5'):
     Params 
     --------
     
-    neuron_data ()
+    neuron_data (array-like)
 
 	time (array-like)
+		Array of time corresponding to the time at which the signal
+    	was sampled. 
 
-	scales ( )
+	scales (array-like)
+    	Pseudo-frequencies, they have units of [signal units (SU) / freq].
+    	A high scale factor corresponds to smaller frequencies.
 
 	wavelet (str, default = 'gaus5')
+
 
     Returns
     --------
@@ -422,6 +479,7 @@ def get_wavelet_basis(neuron_data, time, scales, wavelet = 'gaus5'):
 
 
 def get_knn_graph(data, n_neighbors = 30, **kwargs): 
+    
     """
     Wrapper function to generate a kNN graph using sklearn and NetworkX. 
     
@@ -452,6 +510,7 @@ def get_graph2vec_from_knn(list_of_data, n_neighbors, knn_kwargs={}, graph2vec_k
     
     """
     
+    # Generate a list of knn graphs 
     graph_list = [
         get_knn_graph(data, n_neighbors, **knn_kwargs)
     ]
@@ -515,12 +574,6 @@ def get_z_slice(path_to_mat, fish_number, data_path , slice_ix = 13, return_df =
 	else: 
 		pass 
 
-#def get_z_slice(data_path):
-
-	"""
-	"""
-
-#	zslice = pd.read_csv()
 
 
 
@@ -891,6 +944,7 @@ def brain_cluster_plot_plt(z_slice, xy_coords, clus_number, cluster_labels, colo
 
 
 def brain_cluster_plot_bokeh(z_slice, xy_coords, clus_number, cluster_labels, color):
+    
     """
     Returns a scatterplot of the neurons in a cluster on top of
     a z-slice of an image the zebrafish brain. 
@@ -940,7 +994,9 @@ def get_all_brain_clus_bokeh(
 ):
 
     """
-    Wrapper function to plot all clusters with bokeh. 
+    Wrapper function to plot all clusters with bokeh. Works (best) in jupyter notebooks. 
+
+    Warning: very computationally intensive in terms of graphical processing. 
     
     Params
     ---------
