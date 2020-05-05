@@ -903,11 +903,17 @@ def brain_cluster_plot_plt(z_slice, xy_coords, clus_number, cluster_labels, colo
         
     Params 
     -----
+
+    z_slice (array-like)
+    	Matrix as array
+
+    xy_coords (array-like)
+
     clus_number(int)
         Number of cluster to plot. 
 
     cluster_labels(array-like)
-        List containing the cluster label for each neuron.
+        Numpy array containing the cluster label for each neuron.
 
     color (str)
         Color in HEX format. 
@@ -1038,6 +1044,7 @@ def get_all_brain_clus_bokeh(
 def load_bright_palette():
 
 	"Load custom bright palette."
+
 	# Initialize custom palette 
 	bright_palette = [
 	    '#8dd3c7',
