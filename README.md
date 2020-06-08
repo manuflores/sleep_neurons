@@ -6,7 +6,17 @@ Repository to analyze neuron activity data from whole-brain calcium imaging in z
 
 ## Data 
 
-The dataset used in this work can be downloaded at: 
+You can download all of the datasets from the Chen et al. Neuron 2018 paper by running :
+`
+$ chmod a+x fetch_data.sh 
+$ ./fetch_data.sh
+`
+on the command line. Alternatively, you can download a single dataset in order to run a basic tutorial for exploring the data using : 
+`
+$ ./fetch_sample_dataset.sh
+`
+
+The dataset used in this work can also be downloaded manually at: 
 
 * Chen, Xiuye; Mu, Yu; Kuan, Aaron; Nikitchenko, Maxim; Randlett, Owen; Chen, Alex; et al. (2018): Whole-brain light-sheet imaging data. [https://doi.org/10.25378/janelia.7272617.v4](https://janelia.figshare.com/articles/Whole-brain_light-sheet_imaging_data/7272617/4)
 
