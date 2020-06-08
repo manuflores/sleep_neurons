@@ -32,8 +32,16 @@ Some of the lessons learned after working with the dataset are the following:
 
 The repo organization is as follows: 
 
-* `code`: It contains jupyter notebooks for exploratory data analysis(EDA) and code development. 
-* `sleepa`: Python module (work-in-progress). It will be mainly aimed at data transformation and unsupervised learning. 
+* `code` 
+  * `tutorials`: It contains a demo of the functionalities wrapped up in the `sleepa` package.
+  * `exploratory`:  Documentation of the development of the functions in the package. 
+  * `analysis`: Wrapper functions in order to perform our PCA-UMAP-GMM based clustering, as well as the more meaningful though computationally expensive wavelet transform based pipelines. 
+  
+* `sleepa`: Python module. It will be mainly aimed at unsupervised learning tasks such as dimensionality reduction and clustering. You can install the package by running the command : 
+
+`$ pip install -e .`
+
+in the root directory after cloning the repo. 
 
 
 ## License
