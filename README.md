@@ -1,4 +1,4 @@
-## Unsupervised learning of sleep-active neurons :microscope: :fish:
+## Unsupervised learning of sleep-active neurons :microscope: :fish: :brain: :sleep: :laptop:
 
 
 Repository to analyze neuron activity data from whole-brain calcium imaging in zebrafish. Focused on the discovery of sleep-active neurons. This work is ongoing research of the Prober Lab at Caltech. For more information please contact Manu ([manuflores@caltech.edu](mailto:manuflores@caltech.edu)) or Andrey ([aandrev@caltech.edu](mailto:aandrev@caltech.edu))
