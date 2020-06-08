@@ -8,12 +8,12 @@ Repository to analyze neuron activity data from whole-brain calcium imaging in z
 
 You can download all of the datasets from the Chen et al. Neuron 2018 paper by running :
 `
-$ chmod a+x fetch_data.sh 
-$ ./fetch_data.sh
+$ chmod a+x fetch_data.sh \n
+$ ./fetch_data.sh \n
 `
 on the command line. Alternatively, you can download a single dataset in order to run a basic tutorial for exploring the data using : 
 `
-$ ./fetch_sample_dataset.sh
+$ ./fetch_sample_dataset.sh \n
 `
 
 The dataset used in this work can also be downloaded manually at: 
