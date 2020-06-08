@@ -26,7 +26,7 @@ We thank massively Dr. Chen for guidance in the use of this dataset. Moreover we
 Some of the lessons learned after working with the dataset are the following: 
 
 * Some of the behavior timeseries have more data points than the whole-brain imaging data. We recommend to trimming the last entries of the behavioral channels.
-* To use the mask database one should use the `xyz_noorm` coordinates which are the standard coordinates based on [Z-brain] (https://engertlab.fas.harvard.edu/Z-Brain/).
+* To use the mask database one should use the `xyz_noorm` coordinates which are the standard coordinates based on [Z-brain](https://engertlab.fas.harvard.edu/Z-Brain/).
 
 ## Code
 
