@@ -1,2 +1,3 @@
 #!/bin/bash
-wget https://janelia.figshare.com/ndownloader/articles/7272617/versions/4;
+mkdir -p data_/
+wget -O data_/chen_neuron_dataset.zip https://janelia.figshare.com/ndownloader/articles/7272617/versions/4;
