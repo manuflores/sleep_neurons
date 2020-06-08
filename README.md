@@ -6,7 +6,7 @@ Repository to analyze neuron activity data from whole-brain calcium imaging in z
 
 ## Data 
 
-You can download all of the datasets from the Chen et al. Neuron 2018 paper by running :
+You can download all of the datasets from the [Chen *et al.* Neuron 2018 paper](https://www.cell.com/neuron/pdf/S0896-6273(18)30844-4.pdf) by running :
 
 `$ chmod a+x fetch_data.sh `
 
